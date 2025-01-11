@@ -1,1 +1,4 @@
 /.lake
+/widget/dist
+/widget/node_modules
+/widget/*.log.json
