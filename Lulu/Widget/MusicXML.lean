@@ -100,45 +100,12 @@ instance : ToString Dynamics := ⟨toStr⟩
 
 end Dynamics
 
-inductive Duodecimal.Key
-  | cFlat
-  | c
-  | cSharp
-  | dFlat
-  | d
-  | dSharp
-  | eFlat
-  | e
-  | fFlat
-  | f
-  | fSharp
-  | gFlat
-  | g
-  | gharp
-  | aFlat
-  | a
-  | aSharp
-  | bFlat
-  | b
-  | bSharp
+structure GeneralizedPitch (α : Type*) where
+  step : α
+  alter : ℤ
+  octave : ℕ
 
-namespace Duodecimal
-
-def toneNotation : Fin 12 → String
-  | 0 => "C"
-  | 1 => "♯C/♭D"
-  | 2 => "D"
-  | 3 => "♯D/♭E"
-  | 4 => "E"
-  | 5 => "F"
-  | 6 => "♯F/♭G"
-  | 7 => "G"
-  | 8 => "♯G/♭A"
-  | 9 => "A"
-  | 10 => "♯A/♭B"
-  | 11 => "B"
-
-end Duodecimal
+abbrev Pitch := GeneralizedPitch Septimal
 
 inductive Clef where
   | g : Clef  -- 𝄞
@@ -217,11 +184,6 @@ open ToXML
 instance : ToXML Dynamics := ⟨fun d ↦
   XML.tag (toString d) #[] #[]
   ⟩
-
-structure Pitch where
-  step : Septimal
-  alter : ℤ
-  octave : ℕ
 
 instance : ToXML Pitch := ⟨fun p ↦
   match p with
