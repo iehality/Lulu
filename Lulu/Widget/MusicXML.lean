@@ -30,7 +30,7 @@ partial def toStringAux (n : ℕ) : XML → String
     ++ "\n" ++ indent ++ "</" ++ s ++ ">"
   | .val s args v =>
     let indent := String.replicate (2 * n) ' '
-    indent ++ "<" ++ s ++ args.foldl (fun ih (r, v) ↦ ih ++ " " ++ r ++ "=" ++ v) "" ++ ">"
+    indent ++ "<" ++ s ++ args.foldl (fun ih (r, v) ↦ ih ++ " " ++ r ++ "=" ++ "\"" ++ v ++ "\"") "" ++ ">"
     ++  v
     ++ "</" ++ s ++ ">"
 
@@ -161,6 +161,53 @@ notation "𝄡" => Clef.c
 
 end Clef
 
+inductive NoteType
+  | d1024
+  | d512
+  | d256
+  | d128
+  | d64
+  | d32
+  | d16
+  | e
+  | q
+  | h
+  | w
+  | b
+  | l
+  | m
+
+namespace NoteType
+
+notation "𝅘𝅥𝅲" => d128
+notation "𝅘𝅥𝅱" => d64
+notation "𝅘𝅥𝅰" => d32
+notation "𝅘𝅥𝅯" => d16
+notation "𝅘𝅥𝅮" => e
+notation "𝅘𝅥" => q
+notation "𝅗𝅥" => h
+notation "𝅝" => w
+notation "𝅜" => b
+
+instance : ToString NoteType := ⟨fun n ↦
+  match n with
+  | d1024 => "1024th"
+  | d512 => "512th"
+  | d256 => "256th"
+  | d128 => "128th"
+  | d64 => "64th"
+  | d32 => "32th"
+  | d16 => "16th"
+  | e => "eighth"
+  | q => "quarer"
+  | h => "half"
+  | w => "whole"
+  | b => "breve"
+  | l => "long"
+  | m => "maxima"⟩
+
+end NoteType
+
 /-! ## MusicXML -/
 
 namespace MusicXML
@@ -169,6 +216,29 @@ open ToXML
 
 instance : ToXML Dynamics := ⟨fun d ↦
   XML.tag (toString d) #[] #[]
+  ⟩
+
+structure Pitch where
+  step : Septimal
+  alter : ℤ
+  octave : ℕ
+
+instance : ToXML Pitch := ⟨fun p ↦
+  match p with
+  | ⟨step, alter, octave⟩ =>
+    XML.tag "pitch" #[] #[
+      XML.val "step" #[] (toString step),
+      XML.val "alter" #[] (toString alter),
+      XML.val "octave" #[] (toString octave)
+    ]
+  ⟩
+
+structure Duration where
+  duration : ℕ
+
+instance : ToXML Duration := ⟨fun d ↦
+  match d with
+  | ⟨duration⟩ => XML.val "duration" #[] (toString duration)
   ⟩
 
 /-! ### Partwise / Part
@@ -187,7 +257,6 @@ namespace Measure
   https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/attributes/ -/
 
 inductive Attributes.Elems where
-  | divisions (d : ℕ := 1)
   | key (k : ℤ)
   | time (beats : ℕ) (beatType : ℕ)
   | clef (sign : Clef) (line : ℕ :=
@@ -199,8 +268,6 @@ inductive Attributes.Elems where
 
 instance : ToXML Attributes.Elems := ⟨fun e ↦
   match e with
-  | .divisions d =>
-    XML.val "divisions" #[] (toString d)
   | .key k =>
     XML.tag "key" #[] #[
       XML.val "fifths" #[] (toString k)
@@ -218,12 +285,14 @@ instance : ToXML Attributes.Elems := ⟨fun e ↦
   ⟩
 
 structure Attributes where
-  elems : Array Attributes.Elems
+  divisions : ℕ := 1
+  elems : Array Attributes.Elems := #[]
 
 instance : ToXML Attributes := ⟨fun a ↦
   match a with
-  | ⟨e⟩ =>
-    XML.tag "attributes" #[] (e.map toXML)
+  | ⟨divisions, elems⟩ =>
+    XML.tag "attributes" #[]
+      (#[XML.val "divisions" #[] (toString divisions)] ++ elems.map toXML)
   ⟩
 
 /-! ##### Note
@@ -235,24 +304,27 @@ namespace Notations
 
 structure Tuplet where
   number : ℕ
-  placement : String := "above"
+  type : String
+
+structure Slur where
+  number : ℕ
   type : String
 
 end Notations
 
 inductive Notations.Elems where
   | tied (t : String)
-  | slur (s : String)
+  | slur (s : Notations.Slur)
   | tuplet (t : Notations.Tuplet)
 
 instance : ToXML Notations.Elems := ⟨fun e ↦
   match e with
   | .tied t =>
-    XML.tag "tie" #[("type", t)] #[]
-  | .slur s =>
-    XML.tag "slur" #[("type", s)] #[]
-  | .tuplet ⟨number, placement, type⟩ =>
-    XML.tag "tuplet" #[("number", toString number), ("placement", placement), ("type", type)] #[]
+    XML.tag "tied" #[("type", t)] #[]
+  | .slur ⟨number, type⟩ =>
+    XML.tag "slur" #[("number", toString number), ("type", type)] #[]
+  | .tuplet ⟨number, type⟩ =>
+    XML.tag "tuplet" #[("number", toString number), ("type", type)] #[]
   ⟩
 
 structure Notations where
@@ -262,6 +334,26 @@ instance : ToXML Notations := ⟨fun a ↦
   match a with
   | ⟨e⟩ =>
     XML.tag "notations" #[] (e.map toXML)
+  ⟩
+
+/-! https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/beam/ -/
+structure Beam where
+  value : String
+  number : ℕ := 1
+
+structure TimeModification where
+  actualNotes : ℕ
+  normalNotes : ℕ
+  normalType : NoteType
+
+instance : ToXML TimeModification := ⟨fun t ↦
+  match t with
+  | ⟨a, n, nt⟩ =>
+    XML.tag "time-modification" #[] #[
+      XML.val "actual-notes" #[] (toString a),
+      XML.val "normal-notes" #[] (toString n),
+      XML.val "normal-type" #[] (toString nt)
+    ]
   ⟩
 
 /-
@@ -290,37 +382,85 @@ structure Lyric where
 end Note
 
 inductive Note.Elems where
-  | pitch (step : Septimal) (alter : ℤ) (octave : ℕ)
-  | rest
-  | duration (d : ℕ)
-  | notations (n : Note.Notations)
+  | dot
   | tie (type : String)
+  | type (n : NoteType) -- https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/type/
+  | timeModification (t : TimeModification) -- https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/time-modification/
+  | stem (s : String) -- "up", "down", "none", "double" https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/stem/
+  | beam (b : Note.Beam)
+  | notations (n : Note.Notations)
 
 instance : ToXML Note.Elems := ⟨fun e ↦
   match e with
-  | .pitch step alter octave =>
-    XML.tag "pitch" #[] #[
-      XML.val "step" #[] (toString step),
-      XML.val "alter" #[] (toString alter),
-      XML.val "octave" #[] (toString octave)
-    ]
-  | .rest =>
-    XML.tag "rest" #[("measure", "yes")] #[]
-  | .duration d =>
-    XML.val "duration" #[] (toString d)
+  | .dot =>
+    XML.tag "dot" #[] #[]
+  | .type n =>
+    XML.val "type" #[] (toString n)
+  | .timeModification t =>
+    toXML t
+  | .stem s =>
+    XML.val "stem" #[] s
+  | .beam ⟨value, number⟩ =>
+    XML.val "beam" #[("number", toString number)] value
   | .notations n =>
     toXML n
   | .tie t =>
     XML.tag "tie" #[("type", t)] #[]
   ⟩
 
-structure Note where
-  elems : Array Note.Elems
+structure Tone where
+  pitch : Pitch
+  duration : Duration
+  elems : Array Note.Elems := #[]
 
-instance : ToXML Note := ⟨fun a ↦
+instance : ToXML Tone := ⟨fun a ↦
   match a with
-  | ⟨e⟩ =>
-    XML.tag "note" #[] (e.map toXML)
+  | ⟨pitch, duration, elems⟩ =>
+    XML.tag "note" #[] (
+      #[toXML pitch] ++
+      #[toXML duration] ++
+      elems.map toXML)
+  ⟩
+
+structure Rest where
+  measure : String := "yes"
+  duration : Duration
+  elems : Array Note.Elems := #[]
+
+instance : ToXML Rest := ⟨fun a ↦
+  match a with
+  | ⟨measure, duration, elems⟩ =>
+    XML.tag "note" #[] (
+      #[XML.tag "rest" #[("measure", measure)] #[]] ++
+      #[toXML duration] ++
+      elems.map toXML)
+  ⟩
+
+structure Chord where
+  pitch : Pitch
+  duration : Duration
+  elems : Array Note.Elems := #[]
+
+instance : ToXML Chord := ⟨fun a ↦
+  match a with
+  | ⟨pitch, duration, elems⟩ =>
+    XML.tag "note" #[] (
+      #[XML.tag "chord" #[] #[]] ++
+      #[toXML pitch] ++
+      #[toXML duration] ++
+      elems.map toXML)
+  ⟩
+
+inductive Note where
+  | tone (t : Tone)
+  | rest (r : Rest)
+  | chord (c : Chord)
+
+instance : ToXML Note := ⟨fun n ↦
+  match n with
+  | .tone t => toXML t
+  | .rest r => toXML r
+  | .chord c => toXML c
   ⟩
 
 end Measure
