@@ -29,6 +29,12 @@ const SheetMusicDisplay: React.FC<SheetMusicDisplayProps> = ({ musicXML }) => {
     try {
       if (osmdRef.current) {
         await osmdRef.current.load(xml);
+
+        osmdRef.current.setOptions({
+          drawTitle: false,
+          drawPartNames: false
+        });
+
         osmdRef.current.render();
       }
     } catch (error) {
