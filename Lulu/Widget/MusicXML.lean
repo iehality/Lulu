@@ -3,9 +3,9 @@ import Lulu.Prologue
 /-! ## XML -/
 
 inductive XML where
-  | raw (str : String) : XML
+  | raw (str : String)
+  | val (val : String)
   | tag (s : String) (args : Array (String × String)) (elems : Array XML)
-  | val (s : String) (args : Array (String × String)) (val : String)
 
 structure XMLWithHeader where
   version : String := "1.0"
@@ -17,22 +17,39 @@ class ToXML (α : Type*) where
 
 namespace XML
 
-partial def toStringAux (n : ℕ) : XML → String
+private def initialTag (s : String) (args : Array (String × String)) : String :=
+  "<" ++ s ++ args.foldl (fun ih (r, v) ↦ ih ++ " " ++ r ++ "=" ++ "\"" ++ v ++ "\"") "" ++ ">"
+
+private def terminalTag (s : String) : String :=
+  "</" ++ s ++ ">"
+
+private def emptyTag (s : String) (args : Array (String × String)) : String :=
+  "<" ++ s ++ args.foldl (fun ih (r, v) ↦ ih ++ " " ++ r ++ "=" ++ "\"" ++ v ++ "\"") "" ++ "/>"
+
+partial def toStringAux (x : XML) (n : ℕ) : String :=
+  let indent := String.replicate (2 * n) ' '
+  match x with
   | .raw s =>
-    let indent := String.replicate (2 * n) ' '
     indent ++ s
+  | .val v =>
+    indent ++ v
+  | .tag s args #[] =>
+    indent ++ emptyTag s args
+  | .tag s args #[.val v] =>
+    indent ++ initialTag s args ++ v ++ terminalTag s
   | .tag s args elems =>
-    let indent := String.replicate (2 * n) ' '
-    indent ++ "<" ++ s ++ args.foldl (fun ih (r, v) ↦ ih ++ " " ++ r ++ "=" ++ "\"" ++ v ++ "\"") "" ++ ">"
-    ++ elems.foldl (fun ih r ↦
+    indent ++ initialTag s args
+    ++
+    elems.foldl (fun ih r ↦
       ih
-      ++ "\n" ++ r.toStringAux (n + 1)) ""
-    ++ "\n" ++ indent ++ "</" ++ s ++ ">"
-  | .val s args v =>
-    let indent := String.replicate (2 * n) ' '
-    indent ++ "<" ++ s ++ args.foldl (fun ih (r, v) ↦ ih ++ " " ++ r ++ "=" ++ "\"" ++ v ++ "\"") "" ++ ">"
-    ++  v
-    ++ "</" ++ s ++ ">"
+      ++
+      "\n"
+      ++
+      r.toStringAux (n + 1)) ""
+    ++
+    "\n"
+    ++
+    indent ++ terminalTag s
 
 protected def toString (x : XML) : String := x.toStringAux 0
 
@@ -42,6 +59,12 @@ def h (version : String := "1.0") (encoding : String := "UTF-8") (x : XML) : XML
   version := version
   encoding := encoding
   x := x
+
+instance : ToXML ℕ := ⟨fun n ↦ .val (toString n)⟩
+
+instance : ToXML ℤ := ⟨fun i ↦ .val (toString i)⟩
+
+instance : ToXML String := ⟨.val⟩
 
 end XML
 
@@ -69,7 +92,7 @@ inductive Septimal
 
 namespace Septimal
 
-def toStr : Septimal → String
+protected def toString : Septimal → String
   | c => "C"
   | d => "D"
   | e => "E"
@@ -78,7 +101,9 @@ def toStr : Septimal → String
   | a => "A"
   | b => "B"
 
-instance : ToString Septimal := ⟨toStr⟩
+instance : ToString Septimal := ⟨Septimal.toString⟩
+
+instance : ToXML Septimal := ⟨fun s ↦ .val s.toString⟩
 
 end Septimal
 
@@ -90,13 +115,15 @@ inductive Dynamics where
 
 namespace Dynamics
 
-def toStr : Dynamics → String
+protected def toString : Dynamics → String
   |  p => "p"
   | pp => "pp"
   |  f => "f"
   | ff => "ff"
 
-instance : ToString Dynamics := ⟨toStr⟩
+instance : ToString Dynamics := ⟨Dynamics.toString⟩
+
+instance : ToXML Dynamics := ⟨fun d ↦ XML.tag d.toString #[] #[]⟩
 
 end Dynamics
 
@@ -107,20 +134,45 @@ structure GeneralizedPitch (α : Type*) where
 
 abbrev Pitch := GeneralizedPitch Septimal
 
+namespace GeneralizedPitch
+
+protected def toString [ToString α] : GeneralizedPitch α → String
+  | ⟨s, a, o⟩ =>
+    match a with
+    | 0 => "♮" ++ toString s ++ toString o
+    | .negSucc i => String.replicate (i + 1) '♭' ++ toString s ++ toString o
+    | .ofNat (i + 1) => String.replicate (i + 1) '♯' ++ toString s ++ toString o
+
+instance [ToString α] : ToString  (GeneralizedPitch α) := ⟨GeneralizedPitch.toString⟩
+
+instance : ToXML Pitch := ⟨fun p ↦
+  match p with
+  | ⟨step, alter, octave⟩ =>
+    XML.tag "pitch" #[] #[
+      XML.tag "step" #[] #[ToXML.toXML step],
+      XML.tag "alter" #[] #[ToXML.toXML alter],
+      XML.tag "octave" #[] #[ToXML.toXML octave]
+    ]
+  ⟩
+
+end GeneralizedPitch
+
 inductive Clef where
   | g : Clef  -- 𝄞
   | f : Clef -- 𝄢
   | c : Clef -- 𝄡
   | percussion : Clef
 
+
+
 namespace Clef
 
-instance : ToString Clef := ⟨fun s ↦
-  match s with
-  | .g => "g"
-  | .f => "f"
-  | .c => "c"
-  | .percussion => "percussion"⟩
+instance : ToXML Clef := ⟨fun s ↦
+            match s with
+  |          .g => .val "g"
+  |          .f => .val "f"
+  |          .c => .val "c"
+  | .percussion => .val "percussion"⟩
 
 notation "𝄞" => Clef.g
 notation "𝄢" => Clef.f
@@ -144,6 +196,10 @@ inductive NoteType
   | l
   | m
 
+/-! Length of time when quarter note is set as 1. -/
+structure QLength where
+  val : ℚ
+
 namespace NoteType
 
 notation "𝅘𝅥𝅲" => d128
@@ -159,21 +215,78 @@ notation "𝅜" => b
 instance : ToString NoteType := ⟨fun n ↦
   match n with
   | d1024 => "1024th"
-  | d512 => "512th"
-  | d256 => "256th"
-  | d128 => "128th"
-  | d64 => "64th"
-  | d32 => "32th"
-  | d16 => "16th"
-  | e => "eighth"
-  | q => "quarer"
-  | h => "half"
-  | w => "whole"
-  | b => "breve"
-  | l => "long"
-  | m => "maxima"⟩
+  |  d512 => "512th"
+  |  d256 => "256th"
+  |  d128 => "𝅘𝅥𝅲"
+  |   d64 => "𝅘𝅥𝅱"
+  |   d32 => "𝅘𝅥𝅰"
+  |   d16 => "𝅘𝅥𝅯"
+  |     e => "𝅘𝅥𝅮"
+  |     q => "𝅘𝅥"
+  |     h => "𝅗𝅥"
+  |     w => "𝅝"
+  |     b => "𝅜"
+  |     l => "long"
+  |     m => "maxima"⟩
+
+instance : ToXML NoteType := ⟨fun n ↦
+  match n with
+  | .d1024 => .val "1024th"
+  |  .d512 => .val "512th"
+  |  .d256 => .val "256th"
+  |  .d128 => .val "128th"
+  |   .d64 => .val "64th"
+  |   .d32 => .val "32th"
+  |   .d16 => .val "16th"
+  |     .e => .val "eighth"
+  |     .q => .val "quarer"
+  |     .h => .val "half"
+  |     .w => .val "whole"
+  |     .b => .val "breve"
+  |     .l => .val "long"
+  |     .m => .val "maxima"⟩
+
+def qToneLength : NoteType → QLength
+  | d1024 => ⟨1/256⟩
+  |  d512 => ⟨1/128⟩
+  |  d256 => ⟨1/64⟩
+  |  d128 => ⟨1/32⟩
+  |   d64 => ⟨1/16⟩
+  |   d32 => ⟨1/8⟩
+  |   d16 => ⟨1/4⟩
+  |     e => ⟨1/2⟩
+  |     q => ⟨1⟩
+  |     h => ⟨2⟩
+  |     w => ⟨4⟩
+  |     b => ⟨8⟩
+  |     l => ⟨16⟩
+  |     m => ⟨32⟩
+
+instance : Coe NoteType QLength := ⟨qToneLength⟩
 
 end NoteType
+
+namespace QLength
+
+def noteType (r : QLength) : NoteType :=
+  if r.val ≤ NoteType.d1024.qToneLength.val then NoteType.d1024 else
+  if r.val ≤ NoteType.d512.qToneLength.val then NoteType.d512 else
+  if r.val ≤ NoteType.d256.qToneLength.val then NoteType.d256 else
+  if r.val ≤ 𝅘𝅥𝅲.qToneLength.val then 𝅘𝅥𝅲 else
+  if r.val ≤ 𝅘𝅥𝅱.qToneLength.val then 𝅘𝅥𝅱 else
+  if r.val ≤ 𝅘𝅥𝅰.qToneLength.val then 𝅘𝅥𝅰 else
+  if r.val ≤ 𝅘𝅥𝅯.qToneLength.val then 𝅘𝅥𝅯 else
+  if r.val ≤ 𝅘𝅥𝅮.qToneLength.val then 𝅘𝅥𝅮 else
+  if r.val ≤ 𝅘𝅥.qToneLength.val then 𝅘𝅥 else
+  if r.val ≤ 𝅗𝅥.qToneLength.val then 𝅗𝅥 else
+  if r.val ≤ 𝅝.qToneLength.val then 𝅝 else
+  if r.val ≤ 𝅜.qToneLength.val then 𝅜 else
+  if r.val ≤ NoteType.l.qToneLength.val then NoteType.l else
+  NoteType.m
+
+instance : Coe QLength NoteType := ⟨noteType⟩
+
+end QLength
 
 /-! ## MusicXML -/
 
@@ -181,29 +294,15 @@ namespace MusicXML
 
 open ToXML
 
-instance : ToXML Dynamics := ⟨fun d ↦
-  XML.tag (toString d) #[] #[]
-  ⟩
-
-instance : ToXML Pitch := ⟨fun p ↦
-  match p with
-  | ⟨step, alter, octave⟩ =>
-    XML.tag "pitch" #[] #[
-      XML.val "step" #[] (toString step),
-      XML.val "alter" #[] (toString alter),
-      XML.val "octave" #[] (toString octave)
-    ]
-  ⟩
-
 structure Duration where
   duration : ℕ
 
 instance : ToXML Duration := ⟨fun d ↦
   match d with
-  | ⟨duration⟩ => XML.val "duration" #[] (toString duration)
+  | ⟨duration⟩ => XML.tag "duration" #[] #[toXML duration]
   ⟩
 
-/-! ### Partwise / Part
+/-! ### Partwise
   https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/measure-partwise/ -/
 
 namespace ScorePartwise
@@ -232,17 +331,17 @@ instance : ToXML Attributes.Elems := ⟨fun e ↦
   match e with
   | .key k =>
     XML.tag "key" #[] #[
-      XML.val "fifths" #[] (toString k)
+      XML.tag "fifths" #[] #[toXML k]
     ]
   | .time beats beatType =>
     XML.tag "time" #[] #[
-      XML.val "beats" #[] (toString beats),
-      XML.val "beat-type" #[] (toString beatType)
+      XML.tag "beats" #[] #[toXML beats],
+      XML.tag "beat-type" #[] #[toXML beatType]
     ]
   | .clef sign line =>
     XML.tag "clef" #[] #[
-      XML.val "sign" #[] (toString sign),
-      XML.val "line" #[] (toString line)
+      XML.tag "sign" #[] #[toXML sign],
+      XML.tag "line" #[] #[toXML line]
     ]
   ⟩
 
@@ -253,8 +352,9 @@ structure Attributes where
 instance : ToXML Attributes := ⟨fun a ↦
   match a with
   | ⟨divisions, elems⟩ =>
-    XML.tag "attributes" #[]
-      (#[XML.val "divisions" #[] (toString divisions)] ++ elems.map toXML)
+    XML.tag "attributes" #[] (
+      #[XML.tag "divisions" #[] #[toXML divisions]] ++
+      elems.map toXML)
   ⟩
 
 /-! ##### Note
@@ -268,6 +368,14 @@ structure Tuplet where
   number : ℕ
   type : String
 
+structure NestedTuplet where
+  number : ℕ
+  type : String
+  actualNumber : ℕ
+  actualType : NoteType
+  normalNumber : ℕ
+  normalType : NoteType
+
 structure Slur where
   number : ℕ
   type : String
@@ -278,6 +386,7 @@ inductive Notations.Elems where
   | tied (t : String)
   | slur (s : Notations.Slur)
   | tuplet (t : Notations.Tuplet)
+  | nestedTuplet (t : Notations.NestedTuplet)
 
 instance : ToXML Notations.Elems := ⟨fun e ↦
   match e with
@@ -287,6 +396,17 @@ instance : ToXML Notations.Elems := ⟨fun e ↦
     XML.tag "slur" #[("number", toString number), ("type", type)] #[]
   | .tuplet ⟨number, type⟩ =>
     XML.tag "tuplet" #[("number", toString number), ("type", type)] #[]
+  | .nestedTuplet ⟨number, type, actualNumber, actualType, normalNumber, normalType⟩ =>
+    XML.tag "tuplet" #[("number", toString number), ("type", type)] #[
+      XML.tag "tuplet-actual" #[] #[
+        XML.tag "tuplet-number" #[] #[toXML actualNumber],
+        XML.tag "tuplet-type" #[] #[toXML actualType]
+      ],
+      XML.tag "tuplet-normal" #[] #[
+        XML.tag "tuplet-number" #[] #[toXML normalNumber],
+        XML.tag "tuplet-type" #[] #[toXML normalType]
+      ]
+    ]
   ⟩
 
 structure Notations where
@@ -312,9 +432,9 @@ instance : ToXML TimeModification := ⟨fun t ↦
   match t with
   | ⟨a, n, nt⟩ =>
     XML.tag "time-modification" #[] #[
-      XML.val "actual-notes" #[] (toString a),
-      XML.val "normal-notes" #[] (toString n),
-      XML.val "normal-type" #[] (toString nt)
+      XML.tag "actual-notes" #[] #[toXML a],
+      XML.tag "normal-notes" #[] #[toXML n]--,
+      --XML.tag "normal-type" #[] #[toXML nt]
     ]
   ⟩
 
@@ -357,13 +477,13 @@ instance : ToXML Note.Elems := ⟨fun e ↦
   | .dot =>
     XML.tag "dot" #[] #[]
   | .type n =>
-    XML.val "type" #[] (toString n)
+    XML.tag "type" #[] #[toXML n]
   | .timeModification t =>
     toXML t
   | .stem s =>
-    XML.val "stem" #[] s
+    XML.tag "stem" #[] #[toXML s]
   | .beam ⟨value, number⟩ =>
-    XML.val "beam" #[("number", toString number)] value
+    XML.tag "beam" #[("number", toString number)] #[toXML value]
   | .notations n =>
     toXML n
   | .tie t =>
@@ -414,12 +534,14 @@ instance : ToXML Chord := ⟨fun a ↦
   ⟩
 
 inductive Note where
+  | raw (s : String)
   | tone (t : Tone)
   | rest (r : Rest)
   | chord (c : Chord)
 
 instance : ToXML Note := ⟨fun n ↦
   match n with
+  | .raw s => .raw s
   | .tone t => toXML t
   | .rest r => toXML r
   | .chord c => toXML c
@@ -447,7 +569,7 @@ structure Part where
 instance : ToXML Part := ⟨fun m ↦
   match m with
   | ⟨i, e⟩ =>
-    XML.tag "part" #[("id", toString i)] (e.map toXML)
+    XML.tag "part" #[("id", i)] (e.map toXML)
   ⟩
 
 namespace PartList
@@ -459,8 +581,8 @@ structure ScorePart where
 instance : ToXML ScorePart := ⟨fun s ↦
   match s with
   | ⟨i, n⟩ =>
-    XML.tag "score-part" #[("id", toString i)] #[
-      XML.val "part-name" #[] n
+    XML.tag "score-part" #[("id", i)] #[
+      XML.tag "part-name" #[] #[toXML n]
     ]
   ⟩
 
@@ -500,5 +622,31 @@ instance : ToXML MusicXML := ⟨fun m ↦
   ⟩
 
 instance : ToString MusicXML := ⟨fun m ↦ toString (ToXML.toXML m).h⟩
+
+namespace MusicXML.ScorePartwise.Part.Measure
+
+namespace Note
+
+inductive HorizontalProperty.Sign where
+  | star | continue | end
+
+structure HorizontalProperty where
+  beam   : Array (ℕ × HorizontalProperty.Sign)
+  tuplet : Array (ℕ × HorizontalProperty.Sign)
+  slur   : Array (ℕ × HorizontalProperty.Sign)
+
+namespace HorizontalProperty
+
+def addBeam (p : ℕ × Sign) : HorizontalProperty → HorizontalProperty
+  | ⟨b, t, s⟩ => ⟨b.push p, t, s⟩
+
+def addTuplet (p : ℕ × Sign) : HorizontalProperty → HorizontalProperty
+  | ⟨b, t, s⟩ => ⟨b.push p, t, s⟩
+
+end HorizontalProperty
+
+end Note
+
+end MusicXML.ScorePartwise.Part.Measure
 
 end Lulu

@@ -80,9 +80,13 @@ namespace Notation
 
 inductive BasicVerticalAttriv where
 
+instance : ToString BasicVerticalAttriv := ⟨fun _ ↦ ""⟩
+
 inductive BasicHorizontalAttriv where
   | slur (n : ℕ)
   | tie (n : ℕ)
+
+instance : ToString BasicHorizontalAttriv := ⟨fun _ ↦ ""⟩
 
 end Notation
 
@@ -105,6 +109,13 @@ def cons (ν : Notation n V H) : Notation n V H → Notation n V H
   | horizontal a sub => horizontal a (ν :: sub)
   |   vertical a sub => vertical a (ν :: sub)
 
+protected partial def toString [ToString π] [ToString V] [ToString H] : Notation π V H → String
+  |          pitch p => toString p
+  | horizontal a sub => toString a ++ "(" ++ sub.foldl (fun ih ν ↦ ih ++ " " ++ ν.toString) "" ++ ")"
+  |   vertical a sub => toString a ++ "{" ++ sub.foldl (fun ih ν ↦ ih ++ " " ++ ν.toString) "" ++ "}"
+
+instance [ToString π] [ToString V] [ToString H] : ToString (Notation π V H) := ⟨Notation.toString⟩
+
 section notations
 
 open Lean PrettyPrinter Delaborator SubExpr
@@ -117,8 +128,8 @@ declare_syntax_cat ntt
 
 syntax "⤫ntt[" num "|"  ntt "]" : term
 
-syntax "(" ntt,* ")" : ntt_raw
-syntax "{" ntt,* "}" : ntt_raw
+syntax "(" ntt* ")" : ntt_raw
+syntax "{" ntt* "}" : ntt_raw
 syntax pitch : ntt_raw
 
 syntax ntt_raw ("#" num)?  : ntt
@@ -127,34 +138,50 @@ syntax ntt_raw ("#" num)?  : ntt
 
 /-
 macro_rules
-  | `(⤫ntt[$n:num | ( $ν:ntt,* )]) => do
+  | `(⤫ntt[$n:num | ( $ν:ntt* )]) => do
     let v ← ν.getElems.foldrM (β := Lean.TSyntax _) (init := ← `([])) (fun μ ih ↦
     `(⤫ntt[$n:num | $μ] :: $ih))
     `(horizontal #[] $v)
-  | `(⤫ntt[$n:num | { $ν:ntt,* }]) => do
+  | `(⤫ntt[$n:num | { $ν:ntt* }]) => do
     let v ← ν.getElems.foldrM (β := Lean.TSyntax _) (init := ← `([])) (fun μ ih ↦ `(⤫ntt[$n:num | $μ] :: $ih))
     `(vertical #[] $v)
   | `(⤫ntt[$n:num | $p:pitch]) => `(pitch ⤫pitch[$n:num | $p])
 -/
 
 macro_rules
-  | `(⤫ntt[$_:num |                               ()]) => `(horizontal #[] [])
-  | `(⤫ntt[$n:num |                   ( $μ:ntt_raw )]) => `(horizontal #[] [⤫ntt[$n:num | $μ:ntt_raw]])
-  | `(⤫ntt[$n:num |         ( $μ:ntt_raw, $ν:ntt,* )]) => `(cons ⤫ntt[$n:num | $μ:ntt_raw] ⤫ntt[$n:num | ($ν,*)])
-  | `(⤫ntt[$_:num |           ( $μ:ntt_raw #$m:num )]) => `(horizontal #[] [⤫ntt[$m:num | $μ:ntt_raw]])
-  | `(⤫ntt[$_:num | ( $μ:ntt_raw #$m:num, $ν:ntt,* )]) => `(cons ⤫ntt[$m:num | $μ:ntt_raw] ⤫ntt[$m:num | ($ν,*)])
-  | `(⤫ntt[$_:num |                               {}]) => `(vertical #[] [])
-  | `(⤫ntt[$n:num |                   { $μ:ntt_raw }]) => `(vertical #[] [⤫ntt[$n:num | $μ:ntt_raw]])
-  | `(⤫ntt[$n:num |         { $μ:ntt_raw, $ν:ntt,* }]) => `(cons ⤫ntt[$n:num | $μ:ntt_raw] ⤫ntt[$n:num | {$ν,*}])
-  | `(⤫ntt[$_:num |           { $μ:ntt_raw #$m:num }]) => `(vertical #[] [⤫ntt[$m:num | $μ:ntt_raw]])
-  | `(⤫ntt[$_:num | { $μ:ntt_raw #$m:num, $ν:ntt,* }]) => `(cons ⤫ntt[$m:num | $μ:ntt_raw] ⤫ntt[$m:num | {$ν,*}])
-  | `(⤫ntt[$n:num |                         $p:pitch]) => `(pitch ⤫pitch[$n:num | $p])
+  | `(⤫ntt[$_:num |                             ()]) => `(horizontal #[] [])
+  | `(⤫ntt[$n:num |                 ( $μ:ntt_raw )]) => `(horizontal #[] [⤫ntt[$n:num | $μ:ntt_raw]])
+  | `(⤫ntt[$n:num |         ( $μ:ntt_raw $ν:ntt* )]) => `(cons ⤫ntt[$n:num | $μ:ntt_raw] ⤫ntt[$n:num | ($ν*)])
+  | `(⤫ntt[$_:num |         ( $μ:ntt_raw #$m:num )]) => `(horizontal #[] [⤫ntt[$m:num | $μ:ntt_raw]])
+  | `(⤫ntt[$_:num | ( $μ:ntt_raw #$m:num $ν:ntt* )]) => `(cons ⤫ntt[$m:num | $μ:ntt_raw] ⤫ntt[$m:num | ($ν*)])
+  | `(⤫ntt[$n:num |                       $p:pitch]) => `(pitch ⤫pitch[$n:num | $p])
+
+macro_rules
+  | `(⤫ntt[$_:num |                             {}]) => `(vertical #[] [])
+  | `(⤫ntt[$n:num |                 { $μ:ntt_raw }]) => `(vertical #[] [⤫ntt[$n:num | $μ:ntt_raw]])
+  | `(⤫ntt[$n:num |         { $μ:ntt_raw $ν:ntt* }]) => `(cons ⤫ntt[$n:num | $μ:ntt_raw] ⤫ntt[$n:num | {$ν*}])
+  | `(⤫ntt[$_:num |         { $μ:ntt_raw #$m:num }]) => `(vertical #[] [⤫ntt[$m:num | $μ:ntt_raw]])
+  | `(⤫ntt[$_:num | { $μ:ntt_raw #$m:num $ν:ntt* }]) => `(cons ⤫ntt[$m:num | $μ:ntt_raw] ⤫ntt[$m:num | {$ν*}])
+
 
 #check ⤫ntt[4 | (♮a)]
-#check (⤫ntt[4 | {♮a#2, ♭e, (♭b#8, ♭f, {})}] : BasicNotation)
-
+#eval (⤫ntt[4 | {♮a#2 ♭e (♭b#8 ♭f {})}] : BasicNotation)
 
 end notations
+
+open MusicXML MusicXML.ScorePartwise MusicXML.ScorePartwise.Part MusicXML.ScorePartwise.Part.Measure
+
+namespace ToMusicXML
+
+partial def toNotesAux (divisions : ℕ) : BasicNotation → Array Note
+  | pitch p => #[ .tone { pitch := p, duration := ⟨divisions⟩ } ]
+  | horizontal _ sub => by {  }
+
+end ToMusicXML
+
+
+
+
 
 end Notation
 
