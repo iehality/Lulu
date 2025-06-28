@@ -67,16 +67,16 @@ end SubNat
 namespace DihedralGroup
 
 def act {n} : DihedralGroup n → ZMod n → ZMod n
-  | r i,  j => i + j
-  | sr i, j => - i - j
+  |  r i, j => i + j
+  | sr i, j => -i - j
 
 @[simp] lemma act_one (i : ZMod n) : (1 : DihedralGroup n).act i = i := by simp [one_def, act]
 
 @[simp] lemma act_add (a b : DihedralGroup n) (i : ZMod n) : (a * b).act i = a.act (b.act i) := by
   match a, b with
-  | r j₁,  r j₂  => simp [act, add_assoc]
-  | r j₁,  sr j₂ => simp [act]; ring
-  | sr j₁, r j₂  => simp [act]; ring
+  |  r j₁,  r j₂ => simp [act, add_assoc]
+  |  r j₁, sr j₂ => simp [act]; ring
+  | sr j₁,  r j₂ => simp [act]; ring
   | sr j₁, sr j₂ => simp [act]; ring
 
 instance : MulAction (DihedralGroup n) (ZMod n) where
@@ -96,7 +96,37 @@ lemma sr_eq_rev_mul (i : ZMod n) : sr i = rev n * r i := by simp [rev]
 
 @[simp] lemma rev_smul_rev : rev n • rev n = 1 := by simp [rev, one_def]
 
+protected def toString : DihedralGroup n → String
+  |  r i => s!"R {i.val}"
+  | sr i => s!"S {i.val}"
+
+instance : ToString (DihedralGroup n) := ⟨DihedralGroup.toString⟩
+
 end DihedralGroup
+
+def MZMod (n : ℕ) := ZMod n
+
+namespace MZMod
+
+def cast (i : MZMod n) : ZMod n := i
+
+def ofZMod (i : ZMod n) : MZMod n := i
+
+instance : Group (MZMod n) where
+  mul i j := ofZMod (i.cast + j.cast)
+  one := ofZMod 0
+  inv i := ofZMod (-i.cast)
+  mul_assoc i j k := add_assoc i.cast j.cast k.cast
+  one_mul i := zero_add i.cast
+  mul_one i := add_zero i.cast
+  inv_mul_cancel i := neg_add_cancel i.cast
+
+instance : MulAction (MZMod n) (ZMod n) where
+  smul i x := i.cast + x
+  one_smul x := zero_add x
+  mul_smul i j x := add_assoc i.cast j.cast x
+
+end MZMod
 
 /-! ## Action and Orbit -/
 
@@ -104,9 +134,23 @@ namespace MulAction
 
 section monoid
 
-variable {M α : Type*} [DecidableEq α]
+variable {M α : Type*}
 
 variable [Monoid M] [MulAction M α]
+
+def actl (a : M) (l : List α) : List α := l.map fun t ↦ a • t
+
+lemma actl_one (l : List α) : actl (1 : M) l = l := by simp [actl]
+
+lemma actl_mul (a b : M) (l : List α) : actl (a * b) l = actl a (actl b l) := by
+  ext; simp [actl, MulAction.mul_smul]
+
+instance : MulAction M (List α) where
+  smul := actl
+  one_smul := actl_one
+  mul_smul := actl_mul
+
+variable [DecidableEq α]
 
 def actf (a : M) (s : Finset α) : Finset α := s.image fun t ↦ a • t
 
@@ -363,6 +407,13 @@ def rMin (R : α → α → Prop) [DecidableRel R] : (l : List α) → l.length 
   | a :: b :: l, _ =>
     let m := rMin R (b :: l) (by simp)
     if R a m then a else m
+
+def rMin' (R : ι → ι → Prop) [DecidableRel R] (f : α → ι) : (l : List α) → l.length > 0 → α
+  |          [], h => by simp at h
+  |         [a], _ => a
+  | a :: b :: l, _ =>
+    let m := rMin' R f (b :: l) (by simp)
+    if R (f a) (f m) then a else m
 
 @[simp] lemma rMin_in (l : List α) (hl : l.length > 0) :
     rMin R l hl ∈ l := by

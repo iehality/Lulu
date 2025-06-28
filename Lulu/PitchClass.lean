@@ -46,6 +46,11 @@ def atune (s : Serie n) : Serie n :=
   let a := s.getLast h
   s.map (· - a)
 
+def dAtune (g : DihedralGroup n) (s : Serie n) : DihedralGroup n × Serie n :=
+  if h : s = [] then (1, []) else
+  let a := s.getLast h
+  (.r (-a) * g, s.map (· - a))
+
 end Serie
 
 /-! ## Normal Form -/
@@ -67,7 +72,29 @@ end NormalForm
 
 abbrev Form (G : Type*) [Group G] (n : ℕ) [MulAction G (ZMod n)] := MulAction.Orbit G (NormalForm n)
 
+abbrev SemiprimeForm (n : ℕ) := Form (MZMod n) n
+
 abbrev PrimeForm (n : ℕ) := Form (DihedralGroup n) n
+
+namespace SemiprimeForm
+
+def mk (s : NormalForm n) : SemiprimeForm n := ⟦s⟧
+
+syntax "𝓈𝓅[" term,* "]" : term
+
+macro_rules
+  | `(𝓈𝓅[$terms:term,*]) => `(PrimeForm.mk {$terms:term,*})
+
+/-
+def normFinset : SemiprimeForm n → Finset (NormalForm n) :=
+  Quotient.lift
+    (fun s ↦ (s.image fun i ↦ MZMod.ofZMod (-i) • s))
+    (fun s t hst ↦ by
+      match hst with
+      |  .intro i s => { simp [←MulAction.mul_smul, MulAction.image_smul] })
+-/
+
+end SemiprimeForm
 
 namespace PrimeForm
 
@@ -96,9 +123,22 @@ unsafe def norm (s : PrimeForm n) : Serie n :=
     Serie.atune (L.rMin Serie.IdxLex hL)
   else []
 
+def snormf : Serie n → List (DihedralGroup n × Serie n) := fun s ↦
+  (s.map fun i ↦ (DihedralGroup.r (-i), DihedralGroup.r (-i) • s)) ++
+  (s.map fun i ↦ (DihedralGroup.sr (-i), DihedralGroup.sr (-i) • s))
+
+def snorm (s : Serie n) : DihedralGroup n × Serie n :=
+  let L := snormf s |>.map fun ⟨g, l⟩ ↦ ⟨g, NormalForm.norm l.toFinset⟩
+  if hL : L.length > 0 then
+    let ⟨g, l⟩ := L.rMin' Serie.IdxLex Prod.snd hL
+    Serie.dAtune g l
+  else (1, [])
+
 #eval norm (𝓅[11, 2, 3, 7] : PrimeForm 12)
 
 #eval norm (𝓅[0,3,4,5,8] : PrimeForm 12)
+
+#eval snorm ([0,3,4,5,8] : Serie 12)
 
 end PrimeForm
 
