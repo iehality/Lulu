@@ -12,7 +12,7 @@ require mathlib from git
   "https://github.com/leanprover-community/mathlib4.git"
 
 require proofwidgets from git
-  "https://github.com/leanprover-community/ProofWidgets4"@"v0.0.50"
+  "https://github.com/leanprover-community/ProofWidgets4"@"v0.0.63"
 
 -- https://github.com/leanprover-community/ProofWidgets4/blob/main/lakefile.lean
 

@@ -39,7 +39,7 @@ instance : DecidableRel (IdxLex : Serie n → Serie n → Prop) := fun s₁ s₂
 
 def rotationNorm (s : Serie n) : Serie n :=
   if h : s = [] then [] else
-  List.rMin IdxLex s.rotations (by simp[List.length_pos.mpr h])
+  List.rMin IdxLex s.rotations (by simp[List.length_pos_iff.mpr h])
 
 def atune (s : Serie n) : Serie n :=
   if h : s = [] then [] else

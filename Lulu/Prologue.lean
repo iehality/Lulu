@@ -70,7 +70,8 @@ def act {n} : DihedralGroup n → ZMod n → ZMod n
   |  r i, j => i + j
   | sr i, j => -i - j
 
-@[simp] lemma act_one (i : ZMod n) : (1 : DihedralGroup n).act i = i := by simp [one_def, act]
+@[simp] lemma act_one (i : ZMod n) : (1 : DihedralGroup n).act i = i := by
+  simp only [one_def, act, zero_add]
 
 @[simp] lemma act_add (a b : DihedralGroup n) (i : ZMod n) : (a * b).act i = a.act (b.act i) := by
   match a, b with
@@ -94,7 +95,7 @@ lemma sr_eq_rev_mul (i : ZMod n) : sr i = rev n * r i := by simp [rev]
 
 @[simp] lemma rev_smul (i : ZMod n) : rev n • i = -i := by simp [rev]
 
-@[simp] lemma rev_smul_rev : rev n • rev n = 1 := by simp [rev, one_def]
+@[simp] lemma rev_smul_rev : rev n • rev n = 1 := by simp only [rev, one_def]; simp
 
 protected def toString : DihedralGroup n → String
   |  r i => s!"R {i.val}"
@@ -258,7 +259,7 @@ lemma mem_rotations {l : List α} (hl : l.length > 0) (i : ℕ): l.rotate i ∈ 
 @[simp] lemma length_rotations (l : List α) : l.rotations.length = l.length := by simp [rotations]
 
 theorem mem_of_cons_subset {a : α} {l₁ l₂ : List α} : a :: l₁ ⊆ l₂ → a ∈ l₂ :=
-  fun h ↦ h (mem_cons_self a l₁)
+  fun h ↦ h mem_cons_self
 
 lemma subset_or_mem_of_subset_cons {l₁ l₂ : List α} : l₁ ⊆ a :: l₂ → l₁ ⊆ l₂ ∨ a ∈ l₁ := by
   by_cases ha : a ∈ l₁
@@ -508,14 +509,14 @@ def rMin? (s : Finset α) : Option α := qRec
 
 lemma rMin?_isSome_of_nonempty {s : Finset α} (hs : s.Nonempty) : (s.rMin? R).isSome := by
   induction' s using qInd with l
-  simpa [rMin?] using show 0 < l.length from List.length_pos.mpr (by simpa using hs)
+  simpa [rMin?] using show 0 < l.length from List.length_pos_iff.mpr (by simpa using hs)
 
 def rMin (s : Finset α) (hs : s.Nonempty) : α := (s.rMin? R).get (rMin?_isSome_of_nonempty R hs)
 
 variable {R}
 
 @[simp] lemma toFinset_rMin (l : List α) (hl : l.toFinset.Nonempty) :
-    l.toFinset.rMin R hl = l.rMin R (List.length_pos.mpr (by simpa using hl)) := by
+    l.toFinset.rMin R hl = l.rMin R (List.length_pos_iff.mpr (by simpa using hl)) := by
   simp [rMin, rMin?]
 
 @[simp] lemma rMin_in (s : Finset α) (hs : s.Nonempty) : s.rMin R hs ∈ s := by
